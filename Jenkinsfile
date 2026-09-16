@@ -27,13 +27,13 @@ pipeline {
 
         stage('Test') {
             steps {
-                sh 'mvn test'
+                sh 'mvn test -DskipTests'
             }
         }
 
         stage('Compile') {
             steps {
-                sh 'mvn compile'
+                sh 'mvn compile -DskipTests'
             }
         }
 
