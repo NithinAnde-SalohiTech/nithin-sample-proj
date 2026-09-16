@@ -1,0 +1,116 @@
+pipeline {
+    agent any
+
+    environment {
+        APP_EC2_IP = '172.31.10.254'
+    }
+
+    tools {
+        jdk 'JAVA-25'
+        maven 'MAVEN'
+    }
+
+    stages {
+
+        stage('Git Checkout') {
+            steps {
+                git url: 'https://github.com/NithinAnde-SalohiTech/nithin-sample-proj.git',
+                    branch: 'master'
+            }
+        }
+
+        stage('Validate') {
+            steps {
+                sh 'mvn validate'
+            }
+        }
+
+        stage('Test') {
+            steps {
+                sh 'mvn test'
+            }
+        }
+
+        stage('Compile') {
+            steps {
+                sh 'mvn compile'
+            }
+        }
+
+        stage('Sonar Scan') {
+            steps {
+                withCredentials([
+                    string(
+                        credentialsId: 'SONAR_ID',
+                        variable: 'SONAR_TOKEN'
+                    )
+                ]) {
+                    withSonarQubeEnv('sonarqube') {
+                        sh '''
+                            mvn org.sonarsource.scanner.maven:sonar-maven-plugin:5.6.0.6792:sonar \
+                                -Dsonar.projectKey=nithinande-salohitech \
+                                -Dsonar.organization=nithinande-salohitech \
+                                -Dsonar.host.url=https://sonarcloud.io \
+                                -Dsonar.token=$SONAR_TOKEN
+                        '''
+                    }
+                }
+            }
+        }
+
+        stage('Docker Build') {
+            steps {
+                sh '''
+                    docker build \
+                        -t nithinandedocker/nithin-sample:latest .
+                '''
+            }
+        }
+
+        stage('Docker Push') {
+            steps {
+                withCredentials([
+                    string(
+                        credentialsId: 'DOCKER_ID',
+                        variable: 'DOCKER_PASSWORD'
+                    )
+                ]) {
+                    sh '''
+                        echo "$DOCKER_PASSWORD" | docker login \
+                            -u "nithinandedocker" \
+                            --password-stdin
+
+                        docker push nithinandedocker/nithin-sample:latest
+                    '''
+                }
+            }
+        }
+
+        stage('Deploy to EC2') {
+            steps {
+                withCredentials([
+                    sshUserPrivateKey(
+                        credentialsId: 'APP_EC2_SSH',
+                        keyFileVariable: 'SSH_KEY',
+                        usernameVariable: 'SSH_USER'
+                    )
+                ]) {
+                    sh '''
+                        ssh -o StrictHostKeyChecking=no \
+                            -i "$SSH_KEY" \
+                            "$SSH_USER@$APP_EC2_IP" \
+                            "
+                                docker pull nithinandedocker/nithin-sample:latest &&
+                                docker stop nithin-sample || true &&
+                                docker rm nithin-sample || true &&
+                                docker run -d \
+                                    --name nithin-sample \
+                                    -p 8080:8080 \
+                                    nithinandedocker/nithin-sample:latest
+                            "
+                    '''
+                }
+            }
+        }
+    }
+}
