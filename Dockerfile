@@ -24,7 +24,7 @@ WORKDIR /app
 # Copy the generated ThingsBoard boot JAR
 COPY application/target/*-boot.jar app.jar
 
-EXPOSE 8083
+EXPOSE 8080
 EXPOSE 1883
 EXPOSE 5683/udp
 
